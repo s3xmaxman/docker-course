@@ -1,0 +1,99 @@
+# Docker Composeのバージョンを指定
+version: "3.8"
+
+# 実行するサービス/コンテナを定義
+services:
+  # フロントエンドサービスを定義
+  # サービスには任意の名前を使用できます。フロントエンドには"web"という標準的な命名規則が使われることがあります
+  web:
+    # depends_onを使って、サービスが他のサービスに依存していることを指定します
+    # この場合、webがapiサービスに依存していると指定しています
+    # これはapiサービスがwebサービスより先に開始されることを意味します
+    depends_on: 
+      - api
+    # webサービスのビルドコンテキストを指定します
+    # これはwebサービスのDockerfileが位置するディレクトリです
+    build: ./frontend
+    # webサービスの公開するポートを指定します
+    # 最初の数字はホストマシンのポートです
+    # 二番目の数字はコンテナ内のポートです
+    ports:
+      - 5173:5173
+    # webサービスの環境変数を指定します
+    # これらの環境変数はコンテナ内で利用可能です
+    environment:
+      VITE_API_URL: http://localhost:8000
+
+    # これはDocker Composeのウォッチモード用です
+    # develop以下に記述されたものはDocker Composeのウォッチによって変更が検出され、指定されたアクションが実行されます
+    develop:
+      # 変更を監視するファイルを指定します
+      watch:
+        # package.jsonとpackage-lock.jsonの変更を監視し、変更があればコンテナを再ビルドします
+        - path: ./frontend/package.json
+          action: rebuild
+        - path: ./frontend/package-lock.json
+          action: rebuild
+        # フロントエンドディレクトリの変更を監視し、リアルタイムでコンテナと同期します
+        - path: ./frontend
+          target: /app
+          action: sync
+
+  # apiサービス/コンテナを定義します
+  api: 
+    # apiサービスはdbサービスに依存しているので、dbサービスがapiサービスより先に開始されます
+    depends_on: 
+      - db
+
+    # apiサービスのビルドコンテキストを指定します
+    build: ./backend
+    
+    # apiサービスの公開するポートを指定します
+    # 最初の数字はホストマシンのポートです
+    # 二番目の数字はコンテナ内のポートです
+    ports: 
+      - 8000:8000
+
+    # apiサービスの環境変数を指定します
+    # デモの目的で、ローカルのmongodbインスタンスを使用しています
+    environment: 
+      DB_URL: mongodb://db/anime
+    
+    # apiサービスのDocker Composeウォッチモードを確立します
+    develop:
+      # 変更を監視するファイルを指定します
+      watch:
+        # package.jsonとpackage-lock.jsonの変更を監視し、変更があればコンテナとイメージを再ビルドします
+        - path: ./backend/package.json
+          action: rebuild
+        - path: ./backend/package-lock.json
+          action: rebuild
+        
+        # バックエンドディレクトリの変更を監視し、リアルタイムでコンテナと同期します
+        - path: ./backend
+          target: /app
+          action: sync
+
+  # dbサービスを定義します
+  db:
+    # Docker Hubからdbサービスに使用するイメージを指定します。カスタムイメージがある場合は、このフォーマットで指定できます
+    # 上記の2つのサービスでは、Dockerfileからサービスのイメージをビルドするためにビルドコンテキストを使っていますので、"build: ./frontend"や"build: ./backend"と指定します。
+    # しかしdbサービスにはDocker Hubからイメージを使用しているため、"image: mongo:latest"と指定します
+    # Docker Hubでmongodbのイメージ名とタグをこちらから見つけることができます：https://hub.docker.com/_/mongo
+    image: mongo:latest
+
+    # dbサービスの公開するポートを指定します
+    # 通常、これはmongodb atlasを使用してapiサービスで行います。しかしデモの目的で、ローカルのmongodbインスタンスを使用しています
+    # 通常、mongodbはポート27017で動作します。そのため、ホストマシンのポート27017をコンテナ内のポート27017にマッピングして公開します
+    ports:
+      - 27017:27017
+
+    # dbサービスにマウントするボリュームを指定します
+    # コンテナ内の/data/dbディレクトリに"anime"という名前のボリュームをマウントします
+    # これはmongodbコンテナ内のデータを、コンテナが停止しても保持するために行います
+    volumes:
+      - anime:/data/db
+
+# サービスによって使用されるボリュームを定義します
+volumes:
+  anime:
